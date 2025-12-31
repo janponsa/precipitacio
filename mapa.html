@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="ca">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Mapa Pluvioclimàtic 2025 | Projecte 4 Estacions</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href='https://unpkg.com/mapbox-gl@2.15.0/dist/mapbox-gl.css' rel='stylesheet' />
+
+    <style>
+        :root {
+            --glass: rgba(255, 255, 255, 0.90);
+            --radius: 14px;
+            --primary: #007AFF;
+            --text-primary: #1d1d1f;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background: #000;
+            overflow: hidden;
+        }
+
+        /* RAIN SPLASH */
+        #splash {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at center, #1b2633, #000);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.8s;
+        }
+
+        #rainCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.3;
+        }
+
+        .splash-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            padding: 20px;
+            animation: fadeUp 1s ease-out;
+        }
+
+        .splash-logo {
+            width: 180px;
+            margin-bottom: 20px;
+            filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.2));
+        }
+
+        .splash-title {
+            font-size: 26px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        .splash-desc {
+            font-size: 15px;
+            opacity: 0.8;
+            margin-bottom: 40px;
+            max-width: 480px;
+            line-height: 1.5;
+        }
+
+        .enter-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 25px rgba(0, 122, 255, 0.3);
+            transition: transform 0.2s;
+        }
+
+        .enter-btn:hover {
+            transform: scale(1.05);
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* MAP */
+        #map {
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        /* CONTROLS UTILS */
+        .glass {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: var(--radius);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        /* 1. OPACITY (MINIMIZED ICON) */
+        .opacity-control {
+            margin-top: 15px;
+            margin-right: 15px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            cursor: pointer;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        /* DATA CONTROL (NEW POSITION) */
+        .data-control {
+            margin-top: 10px;
+            margin-right: 15px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .data-control:hover {
+            transform: scale(1.05);
+        }
+
+        .opacity-control:hover,
+        .opacity-control.active {
+            width: 180px;
+            border-radius: 25px;
+        }
+
+        .opacity-icon {
+            min-width: 44px;
+            height: 44px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .opacity-input {
+            width: 100px;
+            margin-left: 5px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s 0.1s;
+        }
+
+        .opacity-control:hover .opacity-input,
+        .opacity-control.active .opacity-input {
+            opacity: 1;
+        }
+
+        /* 2. LEGEND (RESPONSIVE) */
+        .legend-container {
+            padding: 8px 12px;
+            margin: 0 15px 25px 0;
+            text-align: center;
+            max-width: 300px;
+            /* Desktop max */
+        }
+
+        .legend-title {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            color: #555;
+            letter-spacing: 0.5px;
+        }
+
+        .legend-img {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 4px;
+        }
+
+        /* 3. LOGO / CREDITS (RESPONSIVE) */
+        .credits-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            margin: 0 0 20px 15px;
+            max-width: 320px;
+            /* Desktop max */
+        }
+
+        .credits-logo {
+            height: 32px;
+            width: auto;
+        }
+
+        .credits-text {
+            font-size: 11px;
+            line-height: 1.3;
+            color: #333;
+        }
+
+        /* MEDIA QUERIES FOR RESPONSIVENESS */
+        @media (max-width: 768px) {
+
+            /* Ajustem el peu de pàgina per a mòbils */
+            .credits-control {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                background: white !important;
+                border-radius: 0 !important;
+                border-top: 1px solid rgba(0, 0, 0, 0.1);
+                padding: 10px 15px !important;
+                /* Una mica menys de padding lateral */
+                z-index: 9999;
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: space-between;
+                align-items: center;
+                box-sizing: border-box;
+                /* Important per incloure el padding en el 100% */
+            }
+
+            .credits-logo {
+                height: 24px;
+                /* Una mica més petit en mòbil per guanyar espai */
+                width: auto;
+            }
+
+            .credits-text {
+                font-size: 10px;
+                /* Reduïm un punt la font */
+                text-align: right;
+                line-height: 1.2;
+                white-space: nowrap;
+                /* Evita que el text salti de línia si no hi cap */
+            }
+
+
+            /* ADJUST OTHER CONTROLS TO SIT ABOVE FOOTER */
+            /* DINS DE @media (max-width: 768px) */
+
+            .legend-container {
+                bottom: 75px !important;
+                /* Pugem una mica més perquè no toqui el peu nou */
+                right: 10px !important;
+                max-width: 50vw;
+                /* Augmentem del 35vw al 50vw de la pantalla */
+                min-width: 160px;
+                /* Forçem una mida mínima més gran (abans 110px) */
+                margin: 0 !important;
+                padding: 10px !important;
+                font-size: 11px;
+            }
+
+            .legend-title {
+                font-size: 11px;
+                /* Títol una mica més llegible */
+                margin-bottom: 8px;
+            }
+
+            .legend-img {
+                width: 100%;
+                /* La imatge s'adaptarà al nou tamany del contenidor */
+                height: auto;
+            }
+
+            /* Hide default leaflet attr on mobile if needed */
+
+            .enter-btn {
+                padding: 12px 30px;
+                font-size: 14px;
+            }
+
+            .splash-desc {
+                font-size: 13px;
+                padding: 0 20px;
+            }
+        }
+
+        /* 4. COMPACT POPUP (SYNTHESIZED) */
+        .leaflet-popup-content-wrapper {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            color: var(--text-primary);
+            border-radius: 16px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+            padding: 0;
+            border: 0.5px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .leaflet-popup-tip {
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            width: auto !important;
+        }
+
+        .compact-popup {
+            padding: 12px 16px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .pop-muni {
+            font-size: 13px;
+            font-weight: 700;
+            color: #8e8e93;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .pop-val {
+            font-size: 26px;
+            font-weight: 800;
+            color: #1d1d1f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            line-height: 1;
+        }
+
+        .pop-icon {
+            font-size: 22px;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+        }
+
+        .pop-unit {
+            font-size: 14px;
+            font-weight: 500;
+            color: #86868b;
+            margin-left: 2px;
+        }
+
+        /* 5. DATA BTN */
+        .data-btn-container {
+            position: absolute;
+            bottom: 35px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+
+        .data-btn {
+            background: white;
+            color: var(--primary);
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s;
+        }
+
+        .data-btn:hover {
+            transform: scale(1.03);
+        }
+
+        /* 6. MODAL */
+        #dataModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+            z-index: 10001;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #dataModal.active {
+            display: flex;
+        }
+
+        .modal-card {
+            background: #f2f2f7;
+            width: 90%;
+            max-width: 450px;
+            height: 70%;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            padding: 16px;
+            background: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 700;
+            border-bottom: 1px solid #e5e5ea;
+        }
+
+        .close-btn {
+            background: #e5e5ea;
+            border: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .search-area {
+            padding: 10px;
+            background: white;
+            border-bottom: 1px solid #e5e5ea;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: none;
+            background: #e5e5ea;
+            font-size: 15px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .list-wrap {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 10px;
+        }
+
+        .st-row {
+            background: white;
+            margin-top: 10px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .st-row:hover {
+            background: #f9f9f9;
+        }
+
+        .st-val {
+            font-weight: 800;
+            color: var(--primary);
+            font-size: 15px;
+        }
+    </style>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+    <script src="https://unpkg.com/geotiff"></script>
+    <script src='https://unpkg.com/mapbox-gl@2.15.0/dist/mapbox-gl.js'></script>
+    <script src="https://unpkg.com/mapbox-gl-leaflet/leaflet-mapbox-gl.js"></script>
+
+    <!-- TURF.JS FOR POINT IN POLYGON -->
+    <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+
+    <script src="comarques.js"></script>
+    <script src="estacions.js"></script>
+    <script src="municipis.js"></script> <!-- MUNICIPALITY POLYGONS -->
+</head>
+
+<body>
+
+    <!-- SPLASH -->
+    <div id="splash">
+        <canvas id="rainCanvas"></canvas>
+        <div class="splash-content">
+            <img src="https://www.projecte4estacions.com/uploads/1/1/9/0/119049478/published/logo-h-azul.png?1696675697"
+                class="splash-logo">
+            <div class="splash-title">Anàlisi Pluvioclimàtica</div>
+            <div class="splash-desc">
+                Mapa dissenyat pel <strong>Projecte 4 Estacions</strong> a partir de dades del <strong>Meteocat</strong>
+                (a l'espera de validar).
+            </div>
+            <button class="enter-btn" onclick="enterMap()">ENTRAR</button>
+        </div>
+    </div>
+
+    <!-- MAP -->
+    <div id="map"></div>
+
+    <!-- DATA BTN -->
+    <!-- DATA BTN REMOVED (Implemented as Control) -->
+
+    <!-- MODAL -->
+    <div id="dataModal">
+        <div class="modal-card">
+            <div class="modal-header">Estacions Meteocat <button class="close-btn" onclick="closeModal()">✕</button>
+            </div>
+            <div class="search-area"><input type="text" id="sInput" class="search-input" placeholder="Cerca municipi..."
+                    onkeyup="filterL()"></div>
+            <div id="stList" class="list-wrap"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. RAIN ANIMATION ---
+        const cv = document.getElementById('rainCanvas'), ctx = cv.getContext('2d');
+        let w, h; const dr = [];
+        function initR() { w = cv.width = innerWidth; h = cv.height = innerHeight; for (let i = 0; i < 100; i++) dr.push({ x: Math.random() * w, y: Math.random() * h, l: Math.random() * 15, v: Math.random() * 4 + 4 }); }
+        function drawR() {
+            ctx.clearRect(0, 0, w, h); ctx.strokeStyle = 'rgba(130,160,200,0.4)'; ctx.lineWidth = 1; ctx.beginPath();
+            dr.forEach(d => { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x, d.y + d.l); d.y += d.v; if (d.y > h) { d.y = -20; d.x = Math.random() * w } });
+            ctx.stroke(); requestAnimationFrame(drawR);
+        }
+        window.onresize = initR; initR(); drawR();
+
+        function enterMap() {
+            let s = document.getElementById('splash'); s.style.opacity = '0';
+            setTimeout(() => { s.style.display = 'none'; document.getElementById('map').style.opacity = '1'; }, 600);
+        }
+
+        // --- 2. MAP SETUP ---
+        mapboxgl.accessToken = "pk.eyJ1IjoiamFucG9uc2EiLCJhIjoiY21la2JxOGx3MDNvbDJqc2V5dHhrOHlmdSJ9.xP0uBeThN1f-olxgiNd8pw";
+        var map = L.map('map', { center: [41.72, 1.7], zoom: 8, zoomControl: false });
+        L.control.zoom({ position: 'topleft' }).addTo(map);
+
+        var styles = {
+            relleu: L.mapboxGL({ style: 'full_relleu.json', attribution: '' }),
+            icgc: L.mapboxGL({ style: 'https://geoserveis.icgc.cat/contextmaps/icgc_mapa_estandard.json', attribution: '' }),
+            sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '' })
+        };
+        styles.relleu.addTo(map);
+
+        var bounds = [[40.521066, 0.157832], [42.863075, 3.334275]];
+        var precip = L.imageOverlay('mapa_precipitacio_hd.png', bounds, { opacity: 0.85 }).addTo(map);
+        L.geoJSON(comarquesGeojson, { style: { color: "#333", weight: 0.8, opacity: 0.4, fillOpacity: 0 } }).addTo(map);
+
+
+        // --- 3. INVISIBLE MUNICIPIS LAYER FOR GEOCODING ---
+        // We do NOT add this to the map to keep it performant, we just keep the data for querying
+        // But we DO parse it with Turf for point-in-polygon queries.
+        // municipisGeojson is already loaded from municipis.js
+
+        var stLayer = L.geoJSON(estacionsGeojson, {
+            pointToLayer: (f, l) => L.circleMarker(l, { radius: 5, fillColor: f.properties.color || '#f00', weight: 1, color: '#000', fillOpacity: 1 }),
+            onEachFeature: (f, l) => l.on('click', e => { L.DomEvent.stopPropagation(e); showPopup(e.latlng, f.properties.name, f.properties.value); })
+        });
+
+        // --- 4. CONTROLS ---
+
+        // Minimized Opacity
+        var Opacity = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                var d = L.DomUtil.create('div', 'glass opacity-control');
+                d.innerHTML = `<div class="opacity-icon"><i class="fas fa-adjust"></i></div><input type="range" min="0" max="1" step="0.1" value="0.85">`;
+                L.DomEvent.disableClickPropagation(d);
+                d.onclick = () => d.classList.add('active');
+                d.onmouseleave = () => d.classList.remove('active');
+                d.querySelector('input').addEventListener('input', e => precip.setOpacity(e.target.value));
+                return d;
+            }
+        });
+        map.addControl(new Opacity());
+
+        // Data List Button (Under Opacity)
+        var DataCtrl = L.Control.extend({
+            options: { position: 'topright' },
+            onAdd: () => {
+                var d = L.DomUtil.create('div', 'glass data-control');
+                d.innerHTML = `<i class="fas fa-list"></i>`;
+                d.onclick = () => openModal();
+                return d;
+            }
+        });
+        map.addControl(new DataCtrl());
+
+        // Legend (Percentage Sized)
+        var Legend = L.Control.extend({
+            options: { position: 'bottomright' },
+            onAdd: () => {
+                var d = L.DomUtil.create('div', 'glass legend-container');
+                // Removed margin-bottom form JS, handled in CSS
+                d.innerHTML = `<div class="legend-title">Precipitació (mm)</div><img src="llegenda_hd.png" class="legend-img">`;
+                return d;
+            }
+        });
+        map.addControl(new Legend());
+
+        // Credits (Percentage Sized)
+        var Creds = L.Control.extend({
+            options: { position: 'bottomleft' }, onAdd: () => {
+                var d = L.DomUtil.create('div', 'glass credits-control');
+                // Allow default positioning, overwritten by CSS mobile fixed
+                d.innerHTML = `<img src="https://www.projecte4estacions.com/uploads/1/1/9/0/119049478/published/logo-h-azul.png?1696675697" class="credits-logo"><div class="credits-text"><b>Projecte 4 Estacions</b><br>Dades: Servei Meteorològic de Catalunya</div>`;
+                return d;
+            }
+        });
+        map.addControl(new Creds());
+
+        // Layer Control
+        L.control.layers({ "Relleu": styles.relleu, "Mapa": styles.icgc, "Satèl·lit": styles.sat },
+            { "Precipitació": precip, "Estacions": stLayer }, { position: 'topright' }).addTo(map);
+
+        L.Control.geocoder({ defaultMarkGeocode: false, position: 'topleft', placeholder: 'Cerca...' })
+            .on('markgeocode', e => { map.fitBounds(e.geocode.bbox); setTimeout(() => showPopup(e.geocode.center, e.geocode.name), 500); }).addTo(map);
+
+
+        // --- 5. DATA LOGIC & INSTANT GEOCODING 🚀 ---
+        var tiff = { ready: false, data: null, w: 0, h: 0, bbox: null };
+
+        async function loadTiff() {
+            try {
+                const r = await fetch('mapa_precipitacio_hd.tif');
+                if (!r.ok) throw new Error("404");
+                const b = await r.arrayBuffer();
+                const t = await GeoTIFF.fromArrayBuffer(b);
+                const i = await t.getImage();
+                const d = await i.readRasters();
+                tiff.data = d[0]; tiff.w = i.getWidth(); tiff.h = i.getHeight(); tiff.bbox = i.getBoundingBox();
+                tiff.ready = true;
+                console.log("TIFF LOADED");
+            } catch (e) { console.error(e); }
+        }
+        loadTiff();
+
+        // 🚀 INSTANT GEOCODING (Point in Polygon)
+        function getMuniName(latlng) {
+            if (!typeof turf) return null;
+            var pt = turf.point([latlng.lng, latlng.lat]);
+            // Search in municipisGeojson
+            for (var i = 0; i < municipisGeojson.features.length; i++) {
+                var f = municipisGeojson.features[i];
+                if (turf.booleanPointInPolygon(pt, f)) {
+                    return f.properties.NOM_MUNI || f.properties.nom_muni || "Catalunya";
+                }
+            }
+            return null; // Not found (outside Catalonia or sea)
+        }
+
+        function getVal(latlng) {
+            if (!tiff.ready) return null;
+            var pt = L.CRS.EPSG3857.project(latlng);
+            var x = pt.x, y = pt.y, b = tiff.bbox;
+            if (x < b[0] || x > b[2] || y < b[1] || y > b[3]) return null;
+            var px = Math.floor(((x - b[0]) / (b[2] - b[0])) * tiff.w);
+            var py = Math.floor(((b[3] - y) / (b[3] - b[1])) * tiff.h);
+            if (px < 0 || px >= tiff.w || py < 0 || py >= tiff.h) return null;
+            var v = tiff.data[py * tiff.w + px];
+            return (v > -500 && !isNaN(v)) ? v.toFixed(1) : null;
+        }
+
+        async function showPopup(latlng, name = null, val = null) {
+            let v = val !== null ? val.toFixed(1) : getVal(latlng);
+            let displayVal = (v && v !== "NaN" && v !== "null") ? v : "--";
+
+            // 🚀 Rocket Speed Name Lookup
+            let finalName = name;
+            if (!finalName) {
+                // Try local polygon lookup first (0ms)
+                finalName = getMuniName(latlng);
+            }
+            // Fallback if still null (outside polygon)
+            if (!finalName) finalName = "Zona sense definir";
+
+            // COMPACT POPUP CONTENT
+            L.popup({ className: 'p-cust', closeButton: true, minWidth: 120, offset: [0, -10], autoPanPadding: [50, 50] })
+                .setLatLng(latlng).setContent(`
+                <div class="compact-popup">
+                    <div class="pop-muni">${finalName}</div>
+                    <div class="pop-val">
+                        <span class="pop-icon">🌧️</span>
+                        ${displayVal}<span class="pop-unit">mm</span>
+                    </div>
+                </div>
+            `).openOn(map);
+        }
+
+        map.on('click', e => {
+            if (e.originalEvent.target.closest('.leaflet-control') ||
+                e.originalEvent.target.closest('.glass') ||
+                e.originalEvent.target.closest('.leaflet-popup-content-wrapper') ||
+                e.originalEvent.target.closest('.close-btn')) return;
+            showPopup(e.latlng);
+        });
+
+        // --- 6. LIST LOGIC ---
+        const sts = estacionsGeojson.features.map(f => ({ n: f.properties.name, v: f.properties.value, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] })).sort((a, b) => b.v - a.v);
+        function rend(l) { document.getElementById('stList').innerHTML = l.map(s => `<div class="st-row" onclick="goSt(${s.lat},${s.lng},'${s.n.replace(/'/g, "\\'")}', ${s.v})"><div>${s.n}</div><div class="st-val">${s.v}</div></div>`).join(''); }
+        rend(sts);
+        function filterL() { let q = document.getElementById('sInput').value.toLowerCase(); rend(sts.filter(s => s.n.toLowerCase().includes(q))); }
+        function openModal() { document.getElementById('dataModal').classList.add('active'); }
+        function closeModal() { document.getElementById('dataModal').classList.remove('active'); }
+        function goSt(lat, lng, n, v) { closeModal(); map.flyTo([lat, lng], 13); setTimeout(() => showPopup({ lat, lng }, n, v), 1200); }
+
+    </script>
+</body>
+
+</html>
